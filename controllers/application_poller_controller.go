@@ -40,6 +40,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -50,11 +51,15 @@ type Poller struct {
 	log           logr.Logger
 	apiClient     applications.API
 	kubectlExecFn func(cmd *exec.Cmd) ([]byte, error)
+
+	config     *rest.Config
+	metaMapper metameta.RESTMapper
+	scheme     *runtime.Scheme
 }
 
 // NewPoller returns a new Poller with the given Kubernetes client, logger,
 // and application api client configured.
-func NewPoller(kclient client.Client, logger logr.Logger) (*Poller, error) {
+func NewPoller(kclient client.Client, config *rest.Config, mapper metameta.RESTMapper, scheme *runtime.Scheme, logger logr.Logger) (*Poller, error) {
 	appAPI, err := server.NewApplicationAPI(context.Background(), version.GetInfo().String())
 	if err != nil {
 		logger.Info("Application API is unavailable, skipping setup", "message", err.Error())
@@ -62,9 +67,12 @@ func NewPoller(kclient client.Client, logger logr.Logger) (*Poller, error) {
 	}
 
 	return &Poller{
-		client:    kclient,
-		apiClient: appAPI,
-		log:       logger,
+		client:     kclient,
+		apiClient:  appAPI,
+		log:        logger,
+		config:     config,
+		metaMapper: mapper,
+		scheme:     scheme,
 	}, nil
 }
 
@@ -342,6 +350,7 @@ func (p *Poller) generateApp(app optimizeappsv1alpha1.Application) ([]runtime.Ob
 		ExperimentName: strings.ToLower(ulid.MustNew(ulid.Now(), rand.Reader).String()),
 		FilterOptions: scan.FilterOptions{
 			KubectlExecutor: p.kubectlExecFn,
+			MinikubeOpts:    []scan.Option{scan.WithRESTClient(p.config, p.metaMapper)},
 		},
 	}
 

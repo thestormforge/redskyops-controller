@@ -136,7 +136,13 @@ func main() {
 
 	// +kubebuilder:scaffold:builder
 
-	poller, err := controllers.NewPoller(mgr.GetClient(), ctrl.Log.WithName("controllers").WithName("application poller"))
+	poller, err := controllers.NewPoller(
+		mgr.GetClient(),
+		mgr.GetConfig(),
+		mgr.GetRESTMapper(),
+		mgr.GetScheme(),
+		ctrl.Log.WithName("controllers").WithName("application poller"),
+	)
 	if err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "application poller")
 		os.Exit(1)

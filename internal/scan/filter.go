@@ -32,6 +32,7 @@ type FilterOptions struct {
 	DefaultReader     io.Reader
 	KubectlExecutor   func(cmd *exec.Cmd) ([]byte, error)
 	KustomizeExecutor func(cmd *exec.Cmd) ([]byte, error)
+	MinikubeOpts      []Option
 }
 
 // NewFilter creates a new filter with the supplied working directory.
@@ -46,7 +47,7 @@ func (o *FilterOptions) NewFilter(workingDirectory string) *konjure.Filter {
 	}
 
 	if f.KubectlExecutor == nil {
-		f.KubectlExecutor = kubectl
+		f.KubectlExecutor = kubectl(o.MinikubeOpts...)
 	}
 
 	if f.KustomizeExecutor == nil {
@@ -56,34 +57,39 @@ func (o *FilterOptions) NewFilter(workingDirectory string) *konjure.Filter {
 	return f
 }
 
-func kubectl(cmd *exec.Cmd) ([]byte, error) {
-	// If LookPath found the kubectl binary, it is safer to just use it. That
-	// way the cluster version doesn't need to be in the compatibility range of
-	// whatever client-go we were compiled with.
-	if cmd.Path != "kubectl" {
-		return cmd.Output()
+func kubectl(minikubeOpts ...Option) func(*exec.Cmd) ([]byte, error) {
+	return func(cmd *exec.Cmd) ([]byte, error) {
+		// If LookPath found the kubectl binary, it is safer to just use it. That
+		// way the cluster version doesn't need to be in the compatibility range of
+		// whatever client-go we were compiled with.
+		if cmd.Path != "kubectl" {
+			return cmd.Output()
+		}
+
+		// Kustomize has a clown. We have minikubectl.
+		k, err := newMinikubectl(minikubeOpts...)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create and populate a new flag set
+		flags := pflag.NewFlagSet("minikubectl", pflag.ContinueOnError)
+		k.AddFlags(flags)
+
+		// Parse the arguments on exec.Cmd (ignoring arg[0] which is "kubectl")
+		if err := flags.Parse(cmd.Args[1:]); err != nil {
+			return nil, err
+		}
+
+		// If complete fails, assume it was because we asked too much of minikubectl
+		// and we should just run the real thing in a subprocess
+		if err := k.Complete(flags.Args()); err != nil {
+			return cmd.Output()
+		}
+
+		// Run minikubectl with the remaining arguments
+		return k.Run(flags.Args())
 	}
-
-	// Kustomize has a clown. We have minikubectl.
-	k := newMinikubectl()
-
-	// Create and populate a new flag set
-	flags := pflag.NewFlagSet("minikubectl", pflag.ContinueOnError)
-	k.AddFlags(flags)
-
-	// Parse the arguments on exec.Cmd (ignoring arg[0] which is "kubectl")
-	if err := flags.Parse(cmd.Args[1:]); err != nil {
-		return nil, err
-	}
-
-	// If complete fails, assume it was because we asked too much of minikubectl
-	// and we should just run the real thing in a subprocess
-	if err := k.Complete(flags.Args()); err != nil {
-		return cmd.Output()
-	}
-
-	// Run minikubectl with the remaining arguments
-	return k.Run(flags.Args())
 }
 
 func kustomize(cmd *exec.Cmd) ([]byte, error) {
