@@ -43,20 +43,17 @@ jobs:
           minikube delete
           minikube start --vm-driver hyperkit --wait all
           minikube docker-env | sed '/^#/d;s/="\(.*\)"/=\1/g;s/export //g' >> $GITHUB_ENV
-      - name: Cache Go Modules
+      - name: Go Cache
         uses: actions/cache@v1
         with:
-          path: ~/go/pkg/mod
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            %LocalAppData%\go-build
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Cache Go Cache
-        uses: actions/cache@v1
-        with:
-          path: ~/.cache
-          key: ${{ runner.os }}-gobuildcache-${{ hashFiles('**.go') }}
-          restore-keys: |
-            ${{ runner.os }}-gobuildcache-
       - name: Import GPG key
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@v2

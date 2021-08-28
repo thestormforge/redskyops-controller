@@ -91,7 +91,7 @@ generate: controller-gen
 
 build: manifests
 	# Build on host so we can make use of the cache
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags "${LDFLAGS}" -a -o manager main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -ldflags "${LDFLAGS}" -o manager main.go
 
 # Build the docker images
 docker-build: test build docker-build-controller docker-build-setuptools
